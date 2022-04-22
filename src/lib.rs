@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, MetaNameValue,
-    NestedMeta, PathArguments, Type, TypePath,
+    parse_macro_input, Data, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
+    PathArguments, Type, TypePath,
 };
 fn map_to_type(ty: &Type) -> quote::__private::TokenStream {
     match ty {
@@ -202,7 +202,6 @@ fn get_conversion_from_type(
         syn::Type::Path(tp) => tp.path.segments.first().unwrap().ident.to_string(),
         _ => "".to_string(),
     };
-    let optional = ["HashMap", "Option", "Vec"].contains(&the_type.as_str());
     let conversion = map_to_type(ty);
     let hash_map_code = if the_type == "HashMap" {
         quote! {
@@ -256,7 +255,7 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
 
     let field_type: Vec<Type> = fields.iter().map(|field| field.ty.to_owned()).collect();
     let struct_name = &input.ident;
-    let struct_name_str = struct_name.to_string();
+
     let mut from_convs = vec![];
 
     for (the_ident, (ty, attrs)) in field_name
@@ -297,7 +296,10 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
             .iter()
             .find(|a| a.path.segments.first().unwrap().ident == "default_value")
         {
-            match attr.parse_meta().expect("use type_alias(type)") {
+            match attr
+                .parse_meta()
+                .expect("use default_value or default_value = \"identifier\"")
+            {
                 Meta::Path(_) => {
                     quote! {
                         converted_value.unwrap_or_default()
@@ -313,7 +315,7 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
                         converted_value.unwrap_or_else(#str_ident)
                     }
                 }
-                _ => unreachable!("use default or default = \"identifier\""),
+                _ => unreachable!("use default_value or default_value = \"identifier\""),
             }
         } else {
             quote! {
@@ -359,21 +361,14 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
                     ,)*
                 })
             }
-            fn top_level_from_value(mut v: etoml::Value, mut global_symbol_table: etoml::Value) -> Result<Self, Box<dyn std::error::Error>> {
-                  let obj = v.as_object().ok_or_else(||format!("structs need to be objects"))?;
-                  Ok(Self {
-                      #(
-                          #field_name : #from_convs
-                      ,)*
-                  })
-            }
+
             pub fn from_str(input : &str) -> Result<Self, Box<dyn std::error::Error>> {
                 use std::convert::TryFrom;
                 let file = etoml::EToml::try_from(input).unwrap();
 
                 let value = etoml::Value::Object(file.tables);
                 let global_symbol_table = etoml::Value::Object(file.global_symbols);
-                Self::top_level_from_value(value, global_symbol_table)
+                Self::from_value(value, global_symbol_table)
             }
         }
     };
