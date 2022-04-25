@@ -364,7 +364,7 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
 
             pub fn from_str(input : &str) -> Result<Self, Box<dyn std::error::Error>> {
                 use std::convert::TryFrom;
-                let file = etoml::EToml::try_from(input).unwrap();
+                let file = etoml::EToml::try_from(input).map_err(|e| format!("{:?}", e))?;
 
                 let value = etoml::Value::Object(file.tables);
                 let global_symbol_table = etoml::Value::Object(file.global_symbols);
