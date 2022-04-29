@@ -352,8 +352,10 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
     }
     let expanded = quote! {
         #[allow(clippy::eval_order_dependence)]
-        impl #struct_name {
-            pub fn from_value(mut v: etoml::Value, mut global_symbol_table: etoml::Value) -> Result<Self, Box<dyn std::error::Error>> {
+        impl etoml::Deserialize for #struct_name {
+            type Item = #struct_name;
+            type Error = Box<dyn std::error::Error>;
+            fn from_value(mut v: etoml::Value, mut global_symbol_table: etoml::Value) -> Result<Self::Item, Self::Error> {
                 let obj = v.as_object().ok_or_else(||format!("structs need to be objects"))?;
                 Ok(Self {
                     #(
@@ -362,7 +364,7 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
                 })
             }
 
-            pub fn from_str(input : &str) -> Result<Self, Box<dyn std::error::Error>> {
+            fn from_str(input : &str) -> Result<Self::Item, Self::Error> {
                 use std::convert::TryFrom;
                 let file = etoml::EToml::try_from(input).map_err(|e| format!("{:?}", e))?;
 
