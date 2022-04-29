@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
-    PathArguments, Type, TypePath,
+    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Fields, Ident, Lit, Meta,
+    NestedMeta, PathArguments, Type, TypePath,
 };
 fn map_to_type(ty: &Type) -> quote::__private::TokenStream {
     match ty {
@@ -240,11 +242,57 @@ fn get_conversion_from_type(
 )]
 pub fn derive_etoml(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    let struct_name = &input.ident;
     let fields = match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(fields),
             ..
         }) => &fields.named,
+        Data::Enum(DataEnum { variants, .. }) => {
+            let mut names = vec![];
+            let mut idents = vec![];
+            for var in variants {
+                if !var.fields.is_empty() {
+                    panic!("Only Union Enums allowed for now");
+                }
+                names.push(var.ident.to_string());
+                idents.push(var.ident.clone());
+                names.push(var.ident.to_string().to_uppercase());
+                idents.push(var.ident.clone());
+                names.push(var.ident.to_string().to_lowercase());
+                idents.push(var.ident.clone());
+            }
+            let expanded = quote! {
+                #[allow(clippy::eval_order_dependence)]
+                impl etoml::Deserialize for #struct_name {
+                    type Item = #struct_name;
+                    type Error = Box<dyn std::error::Error>;
+                    fn from_value(mut v: etoml::Value, mut global_symbol_table: etoml::Value) -> Result<Self::Item, Self::Error> {
+                        let obj = v.as_string().ok_or_else(||format!("for enums we need a string"))?;
+                       
+                        match obj.as_str() {
+                            #(
+                                #names => Ok(#struct_name::#idents),
+                            )*
+                            r => {
+                                println!("wtf");
+                                Err(format!("{} not found on enum", r).into())
+                            }
+                        }
+                    }
+
+                    fn from_str(input : &str) -> Result<Self::Item, Self::Error> {
+                        match input {
+                            #(
+                                #names => Ok(#struct_name::#idents),
+                            )*
+                            r => Err(format!("{} not found on enum", r).into())
+                        }
+                    }
+                }
+            };
+            return TokenStream::from(expanded);
+        }
         _ => panic!("expected a struct with named fields"),
     };
     let field_name: Vec<Ident> = fields
@@ -254,7 +302,6 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
     let field_attributes: Vec<_> = fields.iter().map(|field| &field.attrs).collect();
 
     let field_type: Vec<Type> = fields.iter().map(|field| field.ty.to_owned()).collect();
-    let struct_name = &input.ident;
 
     let mut from_convs = vec![];
 
@@ -367,9 +414,14 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
             fn from_str(input : &str) -> Result<Self::Item, Self::Error> {
                 use std::convert::TryFrom;
                 let file = etoml::EToml::try_from(input).map_err(|e| format!("{:?}", e))?;
-
-                let value = etoml::Value::Object(file.tables);
                 let global_symbol_table = etoml::Value::Object(file.global_symbols);
+                if file.tables.len() == 1 {
+                    if let Ok(val) = Self::from_value(file.tables.values().next().unwrap().clone(), global_symbol_table.clone()) {
+                        return Ok(val);
+                    }
+                }
+                let value = etoml::Value::Object(file.tables);
+               
                 Self::from_value(value, global_symbol_table)
             }
         }
