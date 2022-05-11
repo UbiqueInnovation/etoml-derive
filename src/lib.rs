@@ -413,11 +413,11 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
                 use std::convert::TryFrom;
                 let file = etoml::EToml::try_from(input).map_err(|e| format!("{:?}", e))?;
                 let global_symbol_table = etoml::Value::Object(file.global_symbols);
-                if file.tables.len() == 1 {
-                    if let Ok(val) = Self::from_value(file.tables.values().next().unwrap().clone(), global_symbol_table.clone()) {
-                        return Ok(val);
-                    }
-                }
+                // if file.tables.len() == 1 {
+                //     if let Ok(val) = Self::from_value(file.tables.values().next().unwrap().clone(), global_symbol_table.clone()) {
+                //         return Ok(val);
+                //     }
+                // }
                 let value = etoml::Value::Object(file.tables);
                
                 Self::from_value(value, global_symbol_table)
