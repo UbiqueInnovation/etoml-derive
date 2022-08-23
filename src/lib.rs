@@ -4,6 +4,7 @@ use syn::{
     parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Fields, Ident, Lit, Meta,
     NestedMeta, PathArguments, Type, TypePath,
 };
+
 fn map_to_type(ty: &Type) -> quote::__private::TokenStream {
     match ty {
         syn::Type::Path(tp) => match tp.path.segments.last().unwrap().ident.to_string().as_str() {
@@ -262,6 +263,7 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
             }
             let expanded = quote! {
                 #[allow(clippy::eval_order_dependence)]
+                #[allow(unused_assignments)]
                 impl etoml::Deserialize for #struct_name {
                     type Item = #struct_name;
                     type Error = Box<dyn std::error::Error>;
@@ -397,9 +399,11 @@ pub fn derive_etoml(input: TokenStream) -> TokenStream {
     }
     let expanded = quote! {
         #[allow(clippy::eval_order_dependence)]
+        #[allow(unused_assignments)]
         impl etoml::Deserialize for #struct_name {
             type Item = #struct_name;
             type Error = Box<dyn std::error::Error>;
+             
             fn from_value(mut v: etoml::Value, mut global_symbol_table: etoml::Value) -> Result<Self::Item, Self::Error> {
                 let obj = v.as_object().ok_or_else(||format!("structs need to be objects"))?;
                 Ok(Self {
